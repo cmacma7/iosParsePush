@@ -6,6 +6,9 @@
 #import <Parse/Parse.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
+
+NSString *msg = @"";
+
 @implementation ParsePlugin
 
 - (void)initialize: (CDVInvokedUrlCommand*)command
@@ -86,6 +89,16 @@
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
+- (void)getNotificationInfo:(CDVInvokedUrlCommand*) command
+{
+    [self.commandDelegate runInBackground:^{
+        CDVPluginResult* pluginResult = nil;
+        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        msg = @"";
+    }];
+}
+
 @end
 
 @implementation AppDelegate (ParsePlugin)
@@ -151,13 +164,30 @@ void MethodSwizzle(Class c, SEL originalSelector) {
                   clientKey:@"u07BoiImZ5FQVtNM2E77F9C8rmPZ18rWWDJjsoVE"];
     
     // Register for Push Notitications
-    UIUserNotificationType userNotificationTypes = (UIUserNotificationTypeAlert |
-                                                    UIUserNotificationTypeBadge |
-                                                    UIUserNotificationTypeSound);
-    UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:userNotificationTypes
-                                                                             categories:nil];
-    [application registerUserNotificationSettings:settings];
-    [application registerForRemoteNotifications];
+    
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 80000
+    if ([application respondsToSelector:@selector(registerUserNotificationSettings:)]) {
+        UIUserNotificationType userNotificationTypes = (UIUserNotificationTypeAlert |
+                                                        UIUserNotificationTypeBadge |
+                                                        UIUserNotificationTypeSound);
+        UIUserNotificationSettings *settings = [UIUserNotificationSettings settingsForTypes:userNotificationTypes
+                                                                                 categories:nil];
+        [application registerUserNotificationSettings:settings];
+        [application registerForRemoteNotifications];
+    } else
+#endif
+    {
+        [application registerForRemoteNotificationTypes:(UIRemoteNotificationTypeBadge |
+                                                         UIRemoteNotificationTypeAlert |
+                                                         UIRemoteNotificationTypeSound)];
+    }
+    UILocalNotification *notification = [launchOptions objectForKey:UIApplicationLaunchOptionsRemoteNotificationKey];
+    if (notification) {
+        [self application:application didReceiveRemoteNotification:(NSDictionary*)notification];
+    }else{
+  
+    }
+    
     
 #if __has_feature(objc_arc)
     self.window = [[UIWindow alloc] initWithFrame:screenBounds];
@@ -195,9 +225,35 @@ void MethodSwizzle(Class c, SEL originalSelector) {
 }
 
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo {
+    if ( application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground  )
+    {
+        msg = [userInfo objectForKey:@"info"];
+        if(!msg){
+            msg = @"";
+        }
+        /*
+        //msg = @"push";
+        if ([[userInfo allKeys] containsObject:@"aps"])
+        {
+            msg = @"aps";
+            if([[[userInfo objectForKey:@"aps"] allKeys] containsObject:@"alert"])
+            {
+                NSDictionary *apsDic = [userInfo valueForKey:@"aps"];
+                msg = [apsDic valueForKey:@"alert"];
+            }
+            
+        }
+        else{
+            //msg = @"push";
+        }
+         */
+    }
+    else{
+      
+    }
+    
     [PFPush handlePush:userInfo];
 }
 
+
 @end
-
-
